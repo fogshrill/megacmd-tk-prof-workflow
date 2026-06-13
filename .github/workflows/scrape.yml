@@ -13,10 +13,6 @@ on:
         required: false
         default: '20'
 
-  # Auto schedule — daily 2 AM Pakistan time (9 PM UTC)
-  schedule:
-    - cron: '0 21 * * *'
-
 # ─────────────────────────────────────────────────────────────
 # STEP 1: Prepare — generate batch name, passed to all workers
 # ─────────────────────────────────────────────────────────────
@@ -24,7 +20,7 @@ jobs:
   prepare:
     runs-on: ubuntu-latest
     outputs:
-      batch_name:    ${{ steps.batch.outputs.batch_name }}
+      batch_name:   ${{ steps.batch.outputs.batch_name }}
       total_chunks:  ${{ steps.batch.outputs.total_chunks }}
       chunk_matrix:  ${{ steps.batch.outputs.chunk_matrix }}
 
@@ -35,8 +31,9 @@ jobs:
       - name: 🏷️ Generate Batch Name + Matrix
         id: batch
         run: |
-          # Batch name: use input or auto-generate timestamp
           INPUT_NAME="${{ github.event.inputs.batch_name }}"
+          INPUT_CHUNKS="${{ github.event.inputs.total_chunks }}"
+
           if [ -z "$INPUT_NAME" ]; then
             BATCH_NAME="Batch--$(date +'%Y-%m-%d-%A_%I-%M-%S-%p')"
           else
@@ -45,17 +42,18 @@ jobs:
           echo "batch_name=$BATCH_NAME" >> $GITHUB_OUTPUT
           echo "✅ Batch: $BATCH_NAME"
 
-          # Total chunks — from input or default 20
-          CHUNKS="${{ github.event.inputs.total_chunks }}"
-          if [ -z "$CHUNKS" ]; then CHUNKS="20"; fi
+          if [ -z "$INPUT_CHUNKS" ]; then
+            CHUNKS="20"
+          else
+            CHUNKS="$INPUT_CHUNKS"
+          fi
           echo "total_chunks=$CHUNKS" >> $GITHUB_OUTPUT
 
-          # Build JSON array for matrix: [0,1,2,...,N-1]
-          MATRIX=$(python3 -c "import json; n=int('$CHUNKS'); print(json.dumps(list(range(n))))")
+          MATRIX=$(python3 -c "import json; n=int('${CHUNKS}'); print(json.dumps(list(range(n))))")
           echo "chunk_matrix=$MATRIX" >> $GITHUB_OUTPUT
           echo "📦 Matrix: $MATRIX"
 
-      # ── CHANGED: check Input_Links folder instead of links.txt ──
+      # ── Check Input_Links folder ──
       - name: 📋 Verify Input_Links Folder
         run: |
           if [ ! -d "Input_Links" ]; then
@@ -116,8 +114,6 @@ jobs:
           sudo apt install ./megacmd-xUbuntu_22.04_amd64.deb -y
 
       # ── MEGAcmd: login via session token stored in GitHub Secret ──
-      # Token kaise nikalna: kisi bhi logged-in machine pe "mega-session" run karo
-      # Token ko GitHub → Settings → Secrets → MEGA_SESSION_TOKEN mein save karo
       - name: 🔑 MEGA Login via Session Token
         run: |
           mega-cmd > /dev/null 2>&1 &
